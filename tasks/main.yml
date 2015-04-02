@@ -1,0 +1,64 @@
+- name: required packages have been installed
+  apt: name={{ item }} state=installed
+  with_items:
+    - git
+    - python-pip
+    - python-libvirt
+    - python-libxml2
+    - novnc
+    - supervisor
+    - nginx
+
+- name: webvirtmgr source has been cloned
+  git: repo=https://github.com/retspen/webvirtmgr.git
+       dest=/var/www/webvirtmgr
+       version=v4.8.8
+
+- name: python packages required by webvirtmgr have been installed
+  pip: requirements=/var/www/webvirtmgr/requirements.txt
+
+- name: database has been synced by django
+  django_manage: command=syncdb
+                 app_path=/var/www/webvirtmgr
+
+- name: fixure for user has been exists
+  copy: src=user.yaml
+        dest=/var/opt/user.yaml
+
+- name: static files have been collected by django
+  django_manage: command=loaddata
+                 app_path=/var/www/webvirtmgr
+                 fixtures=/var/opt/user.yaml
+
+- name: static files have been collected by django
+  django_manage: command=collectstatic
+                 app_path=/var/www/webvirtmgr
+
+- name: permissions on webvirtmgr has been setted
+  file: path=/var/www/webvirtmgr
+        owner=www-data group=www-data
+        recurse=yes
+
+- name: default site has been absent in /etc/nginx/sites-enabled
+  file: path=/etc/nginx/sites-enabled/default
+        state=absent
+
+- name: webvirtmgr.conf has been added in /etc/nginx/conf.d
+  copy: src=nginx.conf
+        dest=/etc/nginx/conf.d/webvirtmgr.conf
+        owner=www-data group=www-data mode=0644
+  notify: restart nginx
+
+- name: webvirtmgr.conf has been added in /etc/supervisor/conf.d
+  copy: src=supervisord.conf
+        dest=/etc/supervisor/conf.d/webvirtmgr.conf
+  notify: restart supervisor
+
+- name: the init script for novnc has been installed
+  file: path=/etc/init.d/novnc
+        src=/var/www/webvirtmgr/conf/initd/webvirtmgr-novnc-ubuntu
+        state=link
+
+- name: novnc service has been started
+  service: name=novnc enabled=yes state=started
+
